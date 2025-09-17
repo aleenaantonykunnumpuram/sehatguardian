@@ -27,14 +27,22 @@ if ($edit_id) {
     $stmt->close();
 }
 
-// Add or Update
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Mark as Taken (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['taken_id'])) {
+    $taken_id = intval($_POST['taken_id']);
+    $update_stmt = $conn->prepare("UPDATE medicine_schedule SET status='Taken' WHERE id = ? AND patient_id = ?");
+    $update_stmt->bind_param("ii", $taken_id, $patient_id);
+    $update_stmt->execute();
+    $update_stmt->close();
+    echo "DONE";
+    exit();
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Add/Update
     $name = trim($_POST['name']);
     $dose = trim($_POST['dose']);
     $time = $_POST['time'];
     $from_date = $_POST['from_date'];
     $to_date = $_POST['to_date'];
-
     if (isset($_POST['update_id']) && $_POST['update_id']) {
         $update_id = intval($_POST['update_id']);
         $stmt = $conn->prepare("
@@ -69,7 +77,7 @@ if (isset($_GET['delete_id'])) {
     exit();
 }
 
-// Fetch All
+// All medicines and today's medicines
 $medicines = [];
 $stmt = $conn->prepare("SELECT * FROM medicine_schedule WHERE patient_id = ? ORDER BY from_date ASC");
 $stmt->bind_param("i", $patient_id);
@@ -80,7 +88,6 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-// Fetch today's medicines for alarm
 $todayMedicines = [];
 $today = date('Y-m-d');
 foreach ($medicines as $row) {
@@ -93,6 +100,7 @@ foreach ($medicines as $row) {
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -101,29 +109,127 @@ foreach ($medicines as $row) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background: #f5f7fa; }
-    .card { border-radius: 10px; }
-    .card-header { font-weight: bold; }
-    .btn-custom { min-width: 90px; }
+    body {
+      background: #e3f0fc;
+      color: #23395d;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .container {
+      max-width: 700px;
+      margin: 32px auto 48px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px #acc6e0aa;
+      padding: 20px 25px 40px;
+    }
+    h2 {
+      color: #296dc1;
+      text-align: center;
+      margin-bottom: 26px;
+    }
+    .card {
+      border: 1px solid #b6c9e1;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 7px #b6c9e122;
+      background: #f7fbff;
+    }
+    .card-header {
+      background: #296dc1;
+      color: #fff;
+      border-radius: 10px 10px 0 0;
+      font-weight: 600;
+      text-align: center;
+      padding: 12px;
+      letter-spacing: 0.5px;
+    }
+    .btn-custom {
+      background: #4a90e2;
+      color: #fff;
+      border-radius: 6px;
+      font-weight: 500;
+      border: none;
+      padding: 7px 18px;
+      transition: background 0.22s;
+    }
+    .btn-custom:hover {
+      background: #296dc1;
+    }
+    .btn-outline-primary, .btn-outline-danger {
+      font-weight: 500;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 0.95rem;
+      margin-left: 4px;
+    }
+    .btn-outline-primary { color: #296dc1; border-color: #296dc1; }
+    .btn-outline-primary:hover { background: #296dc1; color: #fff; border-color: #296dc1;}
+    .btn-outline-danger { color: #cd0031; border-color: #cd0031; }
+    .btn-outline-danger:hover { background: #cd0031; color: #fff;}
+    .table thead { background: #e6f1ff; }
+    .badge-pending { background: #d5e8fa; color: #296dc1; }
+    .badge-taken { background: #4a90e2; color: #fff; }
+    .medicine-checkbox { accent-color: #296dc1; width: 22px; height: 22px; margin-right: 13px;}
+    .list-group-item {
+      background: #f3f9fe;
+      border: 1px solid #c4dcfa;
+      color: #23395d;
+      margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 1rem;
+      border-radius: 6px;
+      padding: 12px 16px;
+      cursor: pointer;
+    }
+    /* Modal */
+    .modal-header { background: #296dc1; color: #fff;}
+    .modal-content { border-radius: 10px; }
+    .btn-close-white { filter: brightness(0) invert(1); }
   </style>
 </head>
 <body>
-<div class="container py-5">
-  <h2 class="mb-4 text-primary">📋 Manage Your Medicines</h2>
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header bg-primary text-white">
-      <?= $edit_medicine ? "Edit Medicine" : "Add New Medicine" ?>
+<div class="container">
+
+  <h2>Medicine Manager</h2>
+
+  <!-- Medicine Checklist -->
+  <div class="card">
+    <div class="card-header">
+      Today's Medicine Checklist
     </div>
+    <div class="card-body">
+      <?php if(count($todayMedicines) > 0): ?>
+        <ul class="list-group" id="medicine-checklist" style="margin-bottom:0;">
+          <?php foreach($todayMedicines as $med): ?>
+            <li class="list-group-item">
+              <div>
+                <input type="checkbox" class="medicine-checkbox" data-id="<?= $med['id']; ?>" <?= $med['status'] === 'Taken' ? 'checked disabled' : ''; ?> />
+                <span><?= htmlspecialchars($med['name']) ?> <small class="text-muted" style="font-weight:600;">at <?= date("h:i A", strtotime($med['time'])) ?></small></span>
+              </div>
+              <span class="badge <?= $med['status'] === 'Taken' ? 'badge-taken' : 'badge-pending' ?>"><?= $med['status'] ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      <?php else: ?>
+        <p>No medicines scheduled for today.</p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- Add/Edit Medicine Form -->
+  <div class="card">
+    <div class="card-header"><?= $edit_medicine ? "Edit Medicine" : "Add New Medicine" ?></div>
     <div class="card-body">
       <form method="POST" class="row g-3">
         <input type="hidden" name="update_id" value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['id']) : '' ?>">
         <div class="col-md-6">
           <label class="form-label">Medicine Name</label>
-          <input type="text" name="name" class="form-control" placeholder="Eg: Paracetamol" required value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['name']) : '' ?>">
+          <input type="text" name="name" class="form-control" required value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['name']) : '' ?>">
         </div>
         <div class="col-md-6">
           <label class="form-label">Dosage</label>
-          <input type="text" name="dose" class="form-control" placeholder="Eg: 500mg" required value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['dose']) : '' ?>">
+          <input type="text" name="dose" class="form-control" required value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['dose']) : '' ?>">
         </div>
         <div class="col-md-4">
           <label class="form-label">Time</label>
@@ -138,30 +244,25 @@ foreach ($medicines as $row) {
           <input type="date" name="to_date" id="to_date" class="form-control" required value="<?= $edit_medicine ? htmlspecialchars($edit_medicine['to_date']) : '' ?>">
         </div>
         <div class="col-12 d-flex justify-content-end">
-          <button type="submit" class="btn btn-success btn-custom"><?= $edit_medicine ? "Update" : "Add" ?></button>
+          <button type="submit" class="btn btn-custom"><?= $edit_medicine ? "Update" : "Add" ?></button>
           <?php if ($edit_medicine): ?>
-            <a href="add_medicine.php" class="btn btn-secondary ms-2 btn-custom">Cancel</a>
+            <a href="add_medicine.php" class="btn btn-outline-primary">Cancel</a>
           <?php endif; ?>
         </div>
       </form>
     </div>
   </div>
-  <div class="card shadow-sm">
-    <div class="card-header bg-dark text-white">
-      📅 Your Medicine Schedule
-    </div>
+
+  <!-- Medicine Schedule Table -->
+  <div class="card">
+    <div class="card-header">Your Medicine Schedule</div>
     <div class="card-body p-0">
       <?php if ($medicines): ?>
         <div class="table-responsive">
           <table class="table table-striped table-hover mb-0">
-            <thead class="table-light">
+            <thead>
               <tr>
-                <th>Medicine</th>
-                <th>Dosage</th>
-                <th>Time</th>
-                <th>From</th>
-                <th>To</th>
-                <th class="text-end">Actions</th>
+                <th>Medicine</th><th>Dosage</th><th>Time</th><th>From</th><th>To</th><th class="text-end">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -173,8 +274,8 @@ foreach ($medicines as $row) {
                   <td><?= htmlspecialchars($m['from_date']) ?></td>
                   <td><?= htmlspecialchars($m['to_date']) ?></td>
                   <td class="text-end">
-                    <a href="add_medicine.php?edit_id=<?= $m['id'] ?>" class="btn btn-sm btn-outline-primary btn-custom">Edit</a>
-                    <a href="add_medicine.php?delete_id=<?= $m['id'] ?>" class="btn btn-sm btn-outline-danger btn-custom" onclick="return confirm('Are you sure you want to delete this medicine?');">Delete</a>
+                    <a href="add_medicine.php?edit_id=<?= $m['id'] ?>" class="btn btn-sm btn-outline-primary">Edit</a>
+                    <a href="add_medicine.php?delete_id=<?= $m['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this medicine?');">Delete</a>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -186,86 +287,100 @@ foreach ($medicines as $row) {
       <?php endif; ?>
     </div>
   </div>
-  <a href="dashboard.php" class="btn btn-link mt-3">&larr; Back to Dashboard</a>
+
+</div>
+<div class="text-center mt-4">
+  <a href="dashboard.php" class="btn btn-custom" style="min-width:150px;">&#8592; Back to Dashboard</a>
 </div>
 
-<!-- ALARM Modal -->
+<!-- Alarm Modal -->
 <div class="modal fade" id="medicineAlarmModal" tabindex="-1" aria-labelledby="medicineAlarmLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header bg-warning">
-        <h5 class="modal-title" id="medicineAlarmLabel">⏰ Medicine Reminder!</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header">
+        <h5 class="modal-title" id="medicineAlarmLabel">⏰ Medicine Reminder</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body" id="alarmContent">
-        <!-- Content set by JS -->
-      </div>
+      <div class="modal-body" id="alarmContent"></div>
     </div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  // Set min/max for date pickers
   const today = new Date().toISOString().split('T')[0];
-  const fiveYearsLater = new Date();
-  fiveYearsLater.setFullYear(fiveYearsLater.getFullYear() + 5);
-  const maxDate = fiveYearsLater.toISOString().split('T')[0];
-
   const fromInput = document.getElementById('from_date');
   const toInput = document.getElementById('to_date');
   fromInput.min = today;
-  fromInput.max = maxDate;
-  toInput.max = maxDate;
   toInput.min = fromInput.value || today;
-  fromInput.addEventListener('change', () => {
-    toInput.min = fromInput.value || today;
-  });
+  fromInput.addEventListener('change', () => { toInput.min = fromInput.value || today; });
 
-  // Medicine alarm logic
-  // Get medicines for today from PHP
+  // Get today's medicines for JS
   const todayMedicines = <?php echo json_encode($todayMedicines); ?>;
+  const reminderWindowMinutes = 5;
+  let shownMedicineIds = new Set();
 
-  todayMedicines.forEach(function(medicine) {
-    // Get target time
-    const now = new Date();
-    const medicineTime = new Date();
-    const [h, m, s] = medicine.time.split(':');
-    medicineTime.setHours(h, m, s ? s : 0, 0);
+  function isTimeInWindow(medicineTimeStr) {
+    const now = new Date(), medicineTime = new Date();
+    const [h, m] = medicineTimeStr.split(':');
+    medicineTime.setHours(h, m, 0, 0);
+    let diffMin = (now - medicineTime) / 60000;
+    return diffMin >= 0 && diffMin <= reminderWindowMinutes;
+  }
 
-    // If time today is still upcoming, set timeout
-    if (medicineTime > now) {
-      const timeoutMs = medicineTime.getTime() - now.getTime();
-      setTimeout(function() {
+  function checkMedicineReminders() {
+    const nowDateStr = new Date().toISOString().split('T')[0];
+    todayMedicines.forEach((medicine) => {
+      if (
+        medicine.status === 'Pending' &&
+        medicine.from_date <= nowDateStr &&
+        medicine.to_date >= nowDateStr &&
+        !shownMedicineIds.has(medicine.id) &&
+        isTimeInWindow(medicine.time)
+      ) {
+        shownMedicineIds.add(medicine.id);
         showAlarmPopup(medicine);
-      }, timeoutMs);
-    }
-    // If already time, show immediately (if you reload at that time)
-    else if (
-      today === medicine.from_date &&
-      today <= medicine.to_date &&
-      medicine.status === 'Pending' &&
-      now.getHours() === Number(h) && now.getMinutes() === Number(m)
-    ) {
-      showAlarmPopup(medicine);
-    }
-  });
+      }
+    });
+  }
+  checkMedicineReminders();
+  setInterval(checkMedicineReminders, 30000);
 
-  // Alarm pop-up function
   function showAlarmPopup(medicine) {
-    const alarmContent = document.getElementById('alarmContent');
-    alarmContent.innerHTML = `
-      <div class="mb-2">
-        <strong>It's time to take your medicine:</strong><br>
-        <span class="fs-5 text-primary">${medicine.name}</span><br>
-        <span class="text-secondary">Dosage: <b>${medicine.dose}</b></span><br>
-        <span class="text-dark">Scheduled Time: <b>${medicine.time}</b></span>
+    document.getElementById('alarmContent').innerHTML = `
+      <div>
+        <b>It’s time to take your medicine:</b><br>
+        <span style="font-size:1.15rem;color:#296dc1;">${medicine.name}</span><br>
+        <span>Dosage: <b>${medicine.dose}</b></span><br>
+        <span>Scheduled Time: <b>${medicine.time}</b></span>
       </div>
     `;
-    const alarmModal = new bootstrap.Modal(document.getElementById('medicineAlarmModal'));
-    alarmModal.show();
-    // Optional: can play a sound here for extra notification
-    // var audio = new Audio('alarm.mp3'); audio.play();
+    (new bootstrap.Modal(document.getElementById('medicineAlarmModal'))).show();
   }
+
+  // Mark as taken via AJAX
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll('.medicine-checkbox').forEach(chk => {
+      chk.addEventListener('change', function() {
+        if(this.checked) {
+          const medId = this.dataset.id;
+          fetch(window.location.href, {
+            method:'POST',
+            headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({ taken_id: medId })
+          })
+          .then(res => res.text())
+          .then(() => {
+            this.disabled = true;
+            this.closest('.list-group-item').querySelector('.badge').textContent = 'Taken';
+            this.closest('.list-group-item').querySelector('.badge').className = 'badge badge-taken';
+          })
+          .catch(()=> alert('❌ Failed to update status. Try again.'));
+        }
+      });
+    });
+  });
 </script>
 </body>
 </html>

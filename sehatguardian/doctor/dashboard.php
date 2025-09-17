@@ -1,16 +1,39 @@
 <?php
-// Session & DB
+// Session & DB and Authentication
 require_once($_SERVER['DOCUMENT_ROOT'].'/sehatguardian/includes/auth.php'); // Use unified auth.php
 checkAuth('doctor');
 require_once($_SERVER['DOCUMENT_ROOT'].'/sehatguardian/includes/db_connect.php');
 
 $doctor_id = $_SESSION['user_id'];
+
+// Handle AJAX request to clear all alerts
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['action']) && $_POST['action'] === 'clear_all_alerts'
+) {
+    // Clear all alerts for doctor's approved/completed patients with status 'Sent'
+    $sql = "UPDATE emergency_alerts ea
+            JOIN appointments a ON ea.patient_id = a.patient_id
+            SET ea.status = 'Cleared'
+            WHERE a.doctor_id = ? AND ea.status = 'Sent' AND a.status IN ('Approved','Completed')";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('i', $doctor_id);
+    $success = $stmt->execute();
+    $stmt->close();
+    $conn->close();
+
+    header('Content-Type: application/json');
+    echo json_encode(['success' => $success]);
+    exit;
+}
 ?>
+
 <!DOCTYPE html>
 <html>
 <head>
     <title>Doctor Dashboard</title>
     <style>
+        /* CSS styles same as your original with teal and alert styles */
         body {
             font-family: Arial, sans-serif;
             background: #e0f7f7;
@@ -115,42 +138,47 @@ $doctor_id = $_SESSION['user_id'];
         .btn-reject:hover {
             background: #900000;
         }
-        .section table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-}
-.section table th, .section table td {
-    border: 1px solid #ddd;
-    padding: 8px;
-}
-.section table th {
-    background-color: #0097a7;
-    color: white;
-    text-align: left;
-}
-
         .alert {
             background: #ff5722;
             color: #fff;
             padding: 8px;
             border-radius: 8px;
             margin-bottom: 15px;
+            position: relative;
+        }
+        #clear-alerts-btn {
+            background: #008080;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            float: right;
+            margin-top: 12px;
+            font-weight: bold;
+        }
+        #clear-alerts-btn:hover {
+            background: #009faf;
+        }
+        /* Clear float after button */
+        .clear-alerts-container::after {
+            content: "";
+            clear: both;
+            display: table;
         }
     </style>
     <script>
-    // Real-time clock in teal box
-    function updateClock() {
-        var now = new Date();
-        var clock = document.getElementById('clock');
-        if (clock) {
-            clock.textContent = now.toLocaleTimeString();
+        // Real-time clock in teal box
+        function updateClock() {
+            var now = new Date();
+            var clock = document.getElementById('clock');
+            if (clock) {
+                clock.textContent = now.toLocaleTimeString();
+            }
         }
-    }
-    setInterval(updateClock, 1000);
-    window.onload = updateClock;
+        setInterval(updateClock, 1000);
+        window.onload = updateClock;
     </script>
-    
 </head>
 <body>
 
@@ -170,13 +198,13 @@ $doctor_id = $_SESSION['user_id'];
     <a href="#patients">My Patients</a>
     <a href="#alerts">Emergency Alerts</a>
     <a href="#healthlog">Health Logs</a>
-
 </div>
 
+<!-- Appointments Section -->
 <div class="section" id="appointments">
     <h2>My Appointments</h2>
     <?php
-    // Accept/Reject appointment logic
+    // Accept/Reject appointment
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_POST['accept']) && isset($_POST['appointment_id'])) {
             $aid = intval($_POST['appointment_id']);
@@ -238,6 +266,7 @@ $doctor_id = $_SESSION['user_id'];
     <?php $stmt->close(); ?>
 </div>
 
+<!-- Patients Section -->
 <div class="section" id="patients">
     <h2>My Patients</h2>
     <?php
@@ -267,15 +296,16 @@ $doctor_id = $_SESSION['user_id'];
     <?php $stmt_pat->close(); ?>
 </div>
 
+<!-- Emergency Alerts Section -->
 <div class="section" id="alerts">
     <h2>Emergency Alerts</h2>
     <?php
     $sql_alerts = "
-        SELECT ea.alert_time, ea.location, ea.message, u.username AS patient_name
+        SELECT ea.alert_id, ea.alert_time, ea.location, ea.message, u.username AS patient_name
         FROM emergency_alerts ea
         JOIN appointments a ON ea.patient_id = a.patient_id
         JOIN users u ON ea.patient_id = u.user_id
-        WHERE a.doctor_id = ? AND a.status IN ('Approved','Completed')
+        WHERE a.doctor_id = ? AND a.status IN ('Approved','Completed') AND ea.status='Sent'
         ORDER BY ea.alert_time DESC
         LIMIT 20
     ";
@@ -284,23 +314,30 @@ $doctor_id = $_SESSION['user_id'];
     $stmt_alert->execute();
     $res_alert = $stmt_alert->get_result();
     ?>
-    <?php if($res_alert && $res_alert->num_rows > 0): foreach($res_alert as $a): ?>
-    <div class="alert">
-        <strong><?= htmlspecialchars($a['patient_name']) ?></strong> at <?= htmlspecialchars($a['location']) ?><br>
-        <em><?= htmlspecialchars($a['message']) ?></em><br>
-        <small><?= htmlspecialchars($a['alert_time']) ?></small>
-    </div>
-    <?php endforeach;
-    else: ?>
-    <div style="text-align:center;">No alerts found.</div>
+    <div id="alerts-container">
+    <?php if($res_alert && $res_alert->num_rows > 0): ?>
+        <?php foreach($res_alert as $a): ?>
+        <div class="alert" data-id="<?= htmlspecialchars($a['alert_id']) ?>">
+            <strong><?= htmlspecialchars($a['patient_name']) ?></strong> at <?= htmlspecialchars($a['location']) ?><br>
+            <em><?= htmlspecialchars($a['message']) ?></em><br>
+            <small><?= htmlspecialchars($a['alert_time']) ?></small>
+        </div>
+        <?php endforeach; ?>
+        <div class="clear-alerts-container">
+            <button id="clear-alerts-btn" class="btn">Clear All Alerts</button>
+        </div>
+    <?php else: ?>
+        <div style="text-align:center;">No alerts found.</div>
     <?php endif; ?>
+    </div>
     <?php $stmt_alert->close(); ?>
 </div>
+
+<!-- Health Logs Section -->
 <div class="section" id="healthlog">
     <h2>Health Logs</h2>
 
     <?php
-    // Fetch approved/completed patients for dropdown
     $stmt_pat = $conn->prepare("
         SELECT DISTINCT u.user_id, u.username 
         FROM appointments a
@@ -334,7 +371,6 @@ $doctor_id = $_SESSION['user_id'];
 
     <?php
     if ($selected_patient) {
-        // Fetch health logs for selected patient
         $stmt_logs = $conn->prepare("
             SELECT log_date, bp, sugar, water_intake, sleep_hours 
             FROM health_log 
@@ -368,6 +404,49 @@ $doctor_id = $_SESSION['user_id'];
     ?>
 </div>
 
+<script>
+    // Clock update
+    function updateClock() {
+        var now = new Date();
+        var clock = document.getElementById('clock');
+        if (clock) {
+            clock.textContent = now.toLocaleTimeString();
+        }
+    }
+    setInterval(updateClock, 1000);
+    window.onload = updateClock;
+
+    // Clear all alerts AJAX
+    document.addEventListener('DOMContentLoaded', function(){
+        var clearBtn = document.getElementById('clear-alerts-btn');
+        if(clearBtn){
+            clearBtn.addEventListener('click', function(){
+                if(!confirm('Are you sure you want to clear all displayed alerts?')) return;
+
+                var formData = new FormData();
+                formData.append('action', 'clear_all_alerts');
+
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.success){
+                        var alerts = document.querySelectorAll('#alerts-container .alert');
+                        alerts.forEach(alert => alert.remove());
+                        clearBtn.style.display = 'none';
+                        alert('All alerts cleared successfully.');
+                    } else {
+                        alert('Failed to clear alerts.');
+                    }
+                })
+                .catch(() => alert('Error clearing alerts.'));
+            });
+        }
+    });
+</script>
 
 </body>
 </html>

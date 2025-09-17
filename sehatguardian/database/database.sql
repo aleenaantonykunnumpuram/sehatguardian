@@ -20,23 +20,31 @@ CREATE TABLE IF NOT EXISTS doctor_profile (
     FOREIGN KEY (doctor_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+
 -- 3. Patient Profile
 CREATE TABLE IF NOT EXISTS patient_profile (
     patient_id INT PRIMARY KEY,
-    medical_condition TEXT,
-    weight DECIMAL(5,2),
-    height DECIMAL(5,2),
-    age INT,
-    id_proof VARCHAR(255),
-    profile_pic VARCHAR(255),
+    date_of_birth DATE NOT NULL,
+    gender ENUM('Male','Female','Other') NOT NULL,
+    contact_number VARCHAR(15) NOT NULL,
+    address TEXT,
+    weight DECIMAL(5,2),         -- in kg
+    height DECIMAL(5,2),         -- in cm
+    blood_group ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-'),
+    allergies TEXT,
+    emergency_contact_name VARCHAR(100),
+    emergency_contact_number VARCHAR(15),
+    emergency_contact_relation VARCHAR(50),
     FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
 
 -- 4. Payments
 
 CREATE TABLE payments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   patient_id INT NOT NULL,
+  appointment_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
   status ENUM('pending', 'processing', 'approved', 'rejected') DEFAULT 'pending',
   billing_name VARCHAR(120),
@@ -44,7 +52,9 @@ CREATE TABLE payments (
   billing_expiry VARCHAR(7),
   billing_address VARCHAR(255),
   payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-  rejection_reason VARCHAR(255) DEFAULT NULL
+  rejection_reason VARCHAR(255) DEFAULT NULL,
+  CONSTRAINT fk_payments_patient FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_payments_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE CASCADE
 );
 
 
