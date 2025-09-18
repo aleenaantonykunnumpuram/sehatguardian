@@ -17,7 +17,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         echo json_encode(['error' => 'Unauthorized']);
         exit;
     } else {
-        header("Location: login.php");
+        header("Location: ../index.php");
         exit();
     }
 }

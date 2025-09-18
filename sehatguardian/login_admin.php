@@ -1,6 +1,8 @@
 <?php
 session_start();
+//require_once 'auth.php';
 require_once("includes/db_connect.php");
+require_once("includes/auth.php");
 
 // If already logged in, redirect to the correct dashboard
 if (isset($_SESSION['role'])) {
@@ -159,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit">Login</button>
     </form>
 
-    <a href="../index.php"><i class="fas fa-arrow-left"></i> Back to Home</a>
+    <a href="index.php"><i class="fas fa-arrow-left"></i> Back to Home</a>
     <?php if (!empty($error)) echo "<p class='error'>$error</p>"; ?>
 </div>
 

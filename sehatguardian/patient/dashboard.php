@@ -9,7 +9,7 @@ header("Expires: 0");
 
 // Check login
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'patient') {
-    header("Location: ../login.php");
+    header("Location: ../login_admin.php");
     exit();
 }
 
