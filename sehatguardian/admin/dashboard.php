@@ -244,7 +244,6 @@ $admin_name = isset($_SESSION['admin_name']) ? $_SESSION['admin_name'] : 'Admin'
     <a href="admin_patient_profile.php"><i class="fas fa-users"></i> View Patients</a>
     <a href="manage_appointments.php"><i class="fas fa-calendar"></i> Appointments</a>
     <a href="admin_payment.php"><i class="fas fa-credit-card"></i> Approve Payments</a>
-    <a href="view_alert.php"><i class="fas fa-envelope"></i> Alerts</a>
     <a href="admin_feedback.php"><i class="fas fa-comment"></i> Reply to feedback</a>  
     <a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
   </div>

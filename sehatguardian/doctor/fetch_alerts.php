@@ -9,8 +9,8 @@ header('Content-Type: application/json');
 
 // Verify user is logged in and is a doctor
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'doctor') {
-    echo json_encode([]);
-    exit;
+    echo json_encode([]);
+    exit;
 }
 
 
@@ -19,7 +19,7 @@ $result = $conn->query("SELECT alert_id, patient_id, alert_time, location, messa
 
 $alerts = [];
 while ($row = $result->fetch_assoc()) {
-    $alerts[] = $row;
+    $alerts[] = $row;
 }
 
 

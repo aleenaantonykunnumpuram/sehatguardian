@@ -46,15 +46,25 @@ CREATE TABLE payments (
   patient_id INT NOT NULL,
   appointment_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
+  payment_method ENUM('Card', 'QR') NOT NULL, -- Added: to track how payment was made
   status ENUM('pending', 'processing', 'approved', 'rejected') DEFAULT 'pending',
+
+  -- Safe billing info (only partial / non-sensitive)
   billing_name VARCHAR(120),
-  billing_card VARCHAR(20),
-  billing_expiry VARCHAR(7),
+  card_last4 CHAR(4), -- ✅ only last 4 digits, instead of full card number
   billing_address VARCHAR(255),
+
+  -- For QR/UPI dummy entry
+  transaction_id VARCHAR(50) DEFAULT NULL,
+  upi_id VARCHAR(100) DEFAULT NULL,
+
   payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   rejection_reason VARCHAR(255) DEFAULT NULL,
-  CONSTRAINT fk_payments_patient FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_payments_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE CASCADE
+
+  CONSTRAINT fk_payments_patient 
+      FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_payments_appointment 
+      FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE CASCADE
 );
 
 
@@ -117,4 +127,15 @@ CREATE TABLE IF NOT EXISTS feedback (
     status ENUM('Pending','Replied') DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+-- 10. medicine taken log
+CREATE TABLE IF NOT EXISTS medicine_taken_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    medicine_id INT NOT NULL,
+    taken_date DATE NOT NULL,
+    taken_time DATETIME NOT NULL,
+    UNIQUE KEY unique_medicine_date (patient_id, medicine_id, taken_date),
+    FOREIGN KEY (patient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (medicine_id) REFERENCES medicine_schedule(id) ON DELETE CASCADE
 );
